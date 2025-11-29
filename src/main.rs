@@ -1,8 +1,10 @@
 use axum::http::{HeaderName, HeaderValue, Method};
 use axum::{routing::get, Json, Router};
 use chrono::{DateTime, Utc};
+use dotenv::dotenv;
 use scraper::{Html, Selector};
 use serde::Serialize;
+use std::env;
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
@@ -134,9 +136,16 @@ fn extract_news_item(
 
 #[tokio::main]
 async fn main() {
+    // Load environment variables from .env file if it exists
+    dotenv().ok();
+
+    // Read backend URL from environment variable or use default
+    let backend_url =
+        env::var("VITE_API_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
     // Enable CORS with specific allowed origins and methods
     let cors = CorsLayer::new()
-        .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
+        .allow_origin(backend_url.parse::<HeaderValue>().unwrap())
         .allow_methods(vec![Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([
             HeaderName::from_static("authorization"),
@@ -153,6 +162,7 @@ async fn main() {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Server listening on http://{}", addr);
+    println!("Backend URL: {}", backend_url);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
