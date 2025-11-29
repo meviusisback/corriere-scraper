@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corriere News Scraper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .news-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .news-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .news-item h2 {
+            margin-top: 0;
+            color: #0066cc;
+        }
+        .news-item img {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+        }
+        .news-item p {
+            line-height: 1.6;
+        }
+        .news-item a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .news-item a:hover {
+            text-decoration: underline;
+        }
+        .error {
+            color: red;
+            background-color: #ffeeee;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Corriere News Scraper</h1>
+
+    <div id="news-container" class="news-container">
+        <!-- News items will be loaded here -->
+    </div>
+
+    <script>
+        async function fetchNews() {
+            try {
+                const response = await fetch("/api/news");
+                const data = await response.json();
+
+                const newsContainer = document.getElementById("news-container");
+
+                if (data.error) {
+                    newsContainer.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                if (data.news.length === 0) {
+                    newsContainer.innerHTML = "<p>No news items found.</p>";
+                    return;
+                }
+
+                const newsHtml = data.news.map(item => `
+                    <div class="news-item">
+                        <h2>${item.title}</h2>
+                        ${item.image_url ? `<img src="${item.image_url}" alt="${item.title}">` : ""}
+                        <p>${item.description}</p>
+                        <a href="${item.link}" target="_blank">Read more</a>
+                    </div>
+                `).join("");
+
+                newsContainer.innerHTML = newsHtml;
+            } catch (error) {
+                console.error("Error fetching news:", error);
+                document.getElementById("news-container").innerHTML =
+                    "<div class=\"error\">Error fetching news. Please try again later.</div>";
+            }
+        }
+
+        // Fetch news when the page loads
+        fetchNews();
+    </script>
+</body>
+</html>
