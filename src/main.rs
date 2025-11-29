@@ -69,6 +69,16 @@ fn extract_news_item(
     summary_selector: &Selector,
     img_selector: &Selector,
 ) -> Option<NewsItem> {
+    let base_url = "https://www.corriere.it";
+
+    let normalize_url = |url: &str| -> String {
+        if !url.starts_with("http") && !url.is_empty() {
+            format!("{}{}", base_url, url)
+        } else {
+            url.to_string()
+        }
+    };
+
     // Extract Title and Link
     let (title, link) = if let Some(title_element) = element.select(title_selector).next() {
         let text = title_element
@@ -77,17 +87,13 @@ fn extract_news_item(
             .join(" ")
             .trim()
             .to_string();
-        let mut href = title_element
+        let href = title_element
             .select(link_selector)
             .next()
             .and_then(|a| a.value().attr("href"))
             .unwrap_or("")
             .to_string();
-        // Normalize to absolute URL if needed
-        if !href.starts_with("http") && !href.is_empty() {
-            href = format!("https://www.corriere.it{}", href);
-        }
-        (text, href)
+        (text, normalize_url(&href))
     } else {
         return None;
     };
@@ -112,11 +118,7 @@ fn extract_news_item(
             .attr("data-src")
             .or_else(|| img.value().attr("src"))
         {
-            let mut url = src.to_string();
-            if !url.starts_with("http") {
-                url = format!("https://www.corriere.it{}", url);
-            }
-            image_url = Some(url);
+            image_url = Some(normalize_url(src));
         }
         // Fallback description from alt if empty
         if description.is_empty() {
@@ -131,6 +133,16 @@ fn extract_news_item(
         description,
         link,
         image_url,
+    })
+}
+
+
+// Helper function to create an error response
+fn create_error_response(error_message: String) -> Json<NewsResponse> {
+    Json(NewsResponse {
+        scraped_at: Utc::now(),
+        news: vec![],
+        error: Some(error_message),
     })
 }
 
@@ -157,7 +169,7 @@ async fn main() {
             "/",
             ServeDir::new("public").append_index_html_on_directories(true),
         )
-        .route("/api/news", get(get_news))
+        .route("/api/news", get(|| async { get_news().await.unwrap_or_else(|e| e) }))
         .layer(cors);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
@@ -168,20 +180,14 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn get_news() -> Json<NewsResponse> {
+async fn get_news() -> Result<Json<NewsResponse>, Json<NewsResponse>> {
     let url = "https://www.corriere.it";
     let mut news_list = Vec::new();
 
     // Fetch the HTML content
     let response = match fetch_html(url).await {
         Ok(text) => text,
-        Err(error_message) => {
-            return Json(NewsResponse {
-                scraped_at: Utc::now(),
-                news: vec![],
-                error: Some(error_message),
-            })
-        }
+        Err(error_message) => return Err(create_error_response(error_message)),
     };
 
     // Parse the HTML document
@@ -190,13 +196,7 @@ async fn get_news() -> Json<NewsResponse> {
     // Create CSS selectors
     let selectors = match create_selectors() {
         Ok(s) => s,
-        Err(error_message) => {
-            return Json(NewsResponse {
-                scraped_at: Utc::now(),
-                news: vec![],
-                error: Some(error_message),
-            })
-        }
+        Err(error_message) => return Err(create_error_response(error_message)),
     };
 
     let (
@@ -227,9 +227,9 @@ async fn get_news() -> Json<NewsResponse> {
         }
     }
 
-    Json(NewsResponse {
+    Ok(Json(NewsResponse {
         scraped_at: Utc::now(),
         news: news_list,
         error: None,
-    })
+    }))
 }
